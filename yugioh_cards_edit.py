@@ -213,7 +213,7 @@ class DeckEditorMainWindow(QMainWindow):
     def action_listwidget_change_item(self, current, previous):
         try:
             if current is not None:
-                print(current, current.number, current.deck_offset)
+                print(current, current.number, hex(current.deck_offset))
 
                 leader = struct.unpack_from("H", self.deck_data, current.number*41*2)[0]
 
@@ -226,7 +226,8 @@ class DeckEditorMainWindow(QMainWindow):
 
                 for i in range(40):
                     card = struct.unpack_from("H", self.deck_data, current.number*41*2 + 2 + i*2)[0] & 0xFFF
-
+                    
+                    print("Debug: Card ID: ", card, hex(card))
                     textedit, indexlabel, cardname = self.card_slots[i][0:3]
 
                     textedit.setText(str(card))
@@ -294,8 +295,46 @@ class DeckEditorMainWindow(QMainWindow):
             traceback.print_exc()
         print("loaded")
 
+    def button_export_decks(self):
+        # Exports 2 csv files
+        # dor_starter_decks.csv
+        # dor_cpu_decks.csv
+        # Both will start with rank, then deck leader, then 40 cards in the deck. 
+        if self.deck_data is not None:
+            save_dir = QFileDialog.getExistingDirectory(self, "Select Save Directory", self.default_path, QFileDialog.ShowDirsOnly);
+            print("Save in: ", save_dir);
+            if save_dir:
+                starter_file = open(save_dir + "/dor_starter_decks.csv", 'w')
+                cpu_file = open(save_dir + "/dor_cpu_decks.csv", 'w')
+
+                # Iterate 17 Starter Decks.
+                for i in range(0, 17):
+                    leader_byte_1, leader_byte_2 = struct.unpack_from("BB", self.deck_data, i * 41 * 2)
+                    rank = leader_byte_2 >> 4
+                    leader_id = ((leader_byte_2 & 0x0F) << 8) + leader_byte_1
+                    
+                    print("\n\nNew Deck: ", "Rank:", rank, leader_id, get_name(leader_id));
+                    for c in range(0, 39):
+                        card = struct.unpack_from("H", self.deck_data, (i * 41 * 2) + 2 + (c * 2))[0] & 0xFFF
+
+                        print("Card: ", card)
+                        # print("Card Bytes: ", hex(card), card)
+                        # card_name = get_name(card)
+                        # print("   Card Bytes LE: ", hex(card), "(",card,card_name,")")
+                        
+                    
+                    pass
+                    
+                # Iterate 24 CPU Decks.
+                for i in range(17, 17 + 24):
+                    pass
+        else:
+            print("No default directory");
+            pass
+
     def button_save_decks(self):
         if self.deck_data is not None:
+            print("[MIKE] Default Path: ", filepath)
             filepath, choosentype = QFileDialog.getSaveFileName(
                 self, "Save File",
                 self.default_path,
@@ -394,6 +433,10 @@ class DeckEditorMainWindow(QMainWindow):
         self.file_save_action = QAction("Save", self)
         self.file_save_action.triggered.connect(self.button_save_decks)
         self.file_menu.addAction(self.file_save_action)
+        
+        self.file_export_action = QAction("Export", self);
+        self.file_export_action.triggered.connect(self.button_export_decks);
+        self.file_menu.addAction(self.file_export_action);
 
         self.statusbar = QStatusBar(self)
         self.statusbar.setObjectName("statusbar")

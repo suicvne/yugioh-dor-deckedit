@@ -4,7 +4,8 @@ import re
 from os import path
 
 from PyQt5.QtCore import QSize, QRect, QMetaObject, QCoreApplication
-from PyQt5.QtWidgets import (QWidget, QMainWindow, QFileDialog,
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import (QMessageBox, QWidget, QMainWindow, QFileDialog,
                              QSpacerItem, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QHBoxLayout,
                              QScrollArea, QGridLayout, QMenuBar, QMenu, QAction, QApplication, QStatusBar, QListWidget,
                              QLineEdit, QTextEdit, QListWidgetItem)
@@ -295,7 +296,14 @@ class DeckEditorMainWindow(QMainWindow):
             traceback.print_exc()
         print("loaded")
 
-    def button_export_decks(self):
+    def button_export_decks_standard(self):
+        self.button_export_decks_internal(exportNames=False)
+    
+    def button_export_decks_friendly(self):
+        self.button_export_decks_internal(exportNames=True)
+
+    # DL Rank,DL,Card0,Card1,....
+    def button_export_decks_internal(self, exportNames=False):
         # Exports 2 csv files
         # dor_starter_decks.csv
         # dor_cpu_decks.csv
@@ -303,31 +311,83 @@ class DeckEditorMainWindow(QMainWindow):
         if self.deck_data is not None:
             save_dir = QFileDialog.getExistingDirectory(self, "Select Save Directory", self.default_path, QFileDialog.ShowDirsOnly);
             print("Save in: ", save_dir);
+
+            starter_file_path = save_dir + "/dor_starter_decks.csv"
+            cpu_file_path = save_dir + "/dor_cpu_decks.csv"
+
             if save_dir:
-                starter_file = open(save_dir + "/dor_starter_decks.csv", 'w')
-                cpu_file = open(save_dir + "/dor_cpu_decks.csv", 'w')
+                starter_file = open(starter_file_path, 'w')
+                cpu_file = open(cpu_file_path, 'w')
 
                 # Iterate 17 Starter Decks.
+                print ("-- Start exporting Starter Decks")
+                # Write Header 
+                starter_file.write("Deck Leader Card ID,Deck Leader Rank,Card IDs\n")
                 for i in range(0, 17):
                     leader_byte_1, leader_byte_2 = struct.unpack_from("BB", self.deck_data, i * 41 * 2)
                     rank = leader_byte_2 >> 4
                     leader_id = ((leader_byte_2 & 0x0F) << 8) + leader_byte_1
+                    leader_name = get_name(leader_id);
                     
-                    print("\n\nNew Deck: ", "Rank:", rank, leader_id, get_name(leader_id));
-                    for c in range(0, 39):
+                    # Write leader_id, rank, WITHOUT new line
+                    starter_file.write("{},{},".format(leader_name if exportNames else leader_id, rank))
+                    for c in range(0, 40):
                         card = struct.unpack_from("H", self.deck_data, (i * 41 * 2) + 2 + (c * 2))[0] & 0xFFF
+                        card_name = get_name(card);
+                        e_val = card_name if exportNames else card
+
+                        # Python's ternary operators look bad, my apologies.
+                        # DONT use a comma , if we're the last element (use newline instead)
+                        #  Otherwise, just print card number followed by ,
+                        card_out = "{}\n".format(e_val) if c == (39) else "{},".format(e_val)
+                        starter_file.write(card_out);
+
+                        print("Card: ", e_val)
+                    
+                starter_file.close();
+
+                # Iterate 24 CPU Decks.
+                print ("-- Start exporting CPU Decks")
+                
+                # Write Header
+                cpu_file.write("Deck Leader Card ID,Deck Leader Rank,Card IDs\n")
+                for i in range(17, 17 + 24):
+                    # Unpack the two bytes that make up the leader ID
+                    leader_byte_1, leader_byte_2 = struct.unpack_from("BB", self.deck_data, i * 41 * 2)
+                    
+                    # Extract rank from upper 4 bits
+                    rank = leader_byte_2 >> 4
+
+                    # Constructing LE number from PS2 BE data
+                    # - Masking rank bits from byte_2 to prevent inaccurate readings
+                    # - Shift That value left 8 places to make room for leader_byte_1
+                    # - Add leader_byte_1 to that value
+                    leader_id = ((leader_byte_2 & 0x0F) << 8) + leader_byte_1
+                    leader_name = get_name(leader_id);
+                    
+                    # Write leader_id, rank, WITHOUT new line
+                    cpu_file.write("{},{},".format(leader_name if exportNames else leader_id, rank))
+
+                    for c in range(0, 40):
+                        card = struct.unpack_from("H", self.deck_data, (i * 41 * 2) + 2 + (c * 2))[0] & 0xFFF
+                        card_name = get_name(card)
+                        e_val = card_name if exportNames else card
+                        # Python's ternary operators look bad, my apologies.
+                        # DONT use a comma , if we're the last element (use newline instead)
+                        #  Otherwise, just print card number followed by ,
+                        card_out = "{}\n".format(e_val) if c == 39 else "{},".format(e_val)
+                        cpu_file.write(card_out);
 
                         print("Card: ", card)
-                        # print("Card Bytes: ", hex(card), card)
-                        # card_name = get_name(card)
-                        # print("   Card Bytes LE: ", hex(card), "(",card,card_name,")")
-                        
-                    
+
                     pass
-                    
-                # Iterate 24 CPU Decks.
-                for i in range(17, 17 + 24):
-                    pass
+
+                cpu_file.close();
+                print("Done")
+                mb = QMessageBox(QMessageBox.Icon.Information, "Done Exporting CSV", "CSV Files have been exported:\n- {}\n- {}".format(starter_file_path, cpu_file_path), parent=self.window());
+                # mb.setMinimumSize(mb.minimumSize().width() + 100, mb.minimumSize().height);
+                mb.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+                mb.exec();
         else:
             print("No default directory");
             pass
@@ -434,8 +494,12 @@ class DeckEditorMainWindow(QMainWindow):
         self.file_save_action.triggered.connect(self.button_save_decks)
         self.file_menu.addAction(self.file_save_action)
         
-        self.file_export_action = QAction("Export", self);
-        self.file_export_action.triggered.connect(self.button_export_decks);
+        self.file_export_action = QAction("Export Decks as CSV (Card IDs)", self);
+        self.file_export_action.triggered.connect(self.button_export_decks_standard);
+        self.file_menu.addAction(self.file_export_action);
+
+        self.file_export_action = QAction("Export Decks as CSV (Card Names)", self);
+        self.file_export_action.triggered.connect(self.button_export_decks_friendly);
         self.file_menu.addAction(self.file_export_action);
 
         self.statusbar = QStatusBar(self)

@@ -321,8 +321,13 @@ class DeckEditorMainWindow(QMainWindow):
 
                 # Iterate 17 Starter Decks.
                 print ("-- Start exporting Starter Decks")
+                
                 # Write Header 
-                starter_file.write("Deck Leader Card ID,Deck Leader Rank,Card IDs\n")
+                starter_file.write("Deck Leader Card ID,Deck Leader Rank,")
+                for i in range(0, 40):
+                    starter_file.write("Card {}".format(i) if i == 39 else "Card {},".format(i))
+                starter_file.write("\n")
+
                 for i in range(0, 17):
                     leader_byte_1, leader_byte_2 = struct.unpack_from("BB", self.deck_data, i * 41 * 2)
                     rank = leader_byte_2 >> 4
@@ -350,7 +355,11 @@ class DeckEditorMainWindow(QMainWindow):
                 print ("-- Start exporting CPU Decks")
                 
                 # Write Header
-                cpu_file.write("Deck Leader Card ID,Deck Leader Rank,Card IDs\n")
+                cpu_file.write("Deck Leader Card ID,Deck Leader Rank,")
+                for i in range(0, 40):
+                    cpu_file.write("Card {}".format(i) if i == 39 else "Card {},".format(i))
+                cpu_file.write("\n")
+
                 for i in range(17, 17 + 24):
                     # Unpack the two bytes that make up the leader ID
                     leader_byte_1, leader_byte_2 = struct.unpack_from("BB", self.deck_data, i * 41 * 2)
